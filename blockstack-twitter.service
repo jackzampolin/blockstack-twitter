@@ -1,0 +1,8 @@
+[Unit]
+Description=This is a server to cache the 15 most recent tweets on a topic and forward them to a client. CORS enabled for frontends
+
+[Service]
+ExecStart=/usr/bin/blockstack-twitter serve --config /home/ubuntu/.blockstack-twitter.yaml
+
+[Install]
+WantedBy=multi-user.target
