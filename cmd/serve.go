@@ -21,6 +21,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/dghubble/oauth1"
@@ -37,6 +38,16 @@ type TwitterClient struct {
 
 type Tweets []twitter.Tweet
 
+func (t Tweets) filterRTs() []twitter.Tweet {
+	out := make([]twitter.Tweet, 0)
+	for _, tw := range t {
+		if strings.Contains(tw.Text, viper.GetString("search")) {
+			out = append(out, tw)
+		}
+	}
+	return out
+}
+
 // NewTwitterClient does the things
 func NewTwitterClient() *TwitterClient {
 	config := oauth1.NewConfig(viper.GetString("consumerKey"), viper.GetString("consumerSecret"))
@@ -45,6 +56,7 @@ func NewTwitterClient() *TwitterClient {
 	client := twitter.NewClient(httpClient)
 	s, _, err := client.Search.Tweets(&twitter.SearchTweetParams{
 		Query: viper.GetString("search"),
+		Count: 20,
 	})
 	if err != nil {
 		panic(err)
@@ -55,7 +67,7 @@ func NewTwitterClient() *TwitterClient {
 	}
 	return &TwitterClient{
 		Client: client,
-		Tweets: s.Statuses,
+		Tweets: Tweets(s.Statuses).filterRTs(),
 	}
 }
 
@@ -83,9 +95,11 @@ func (t *TwitterClient) readStream() {
 }
 
 func (t *TwitterClient) addTweet(tweet twitter.Tweet) {
-	t.Tweets = append(t.Tweets, tweet)
-	sort.Sort(Tweets(t.Tweets))
-	t.Tweets = t.Tweets[:len(t.Tweets)-1]
+	if strings.Contains(tweet.Text, viper.GetString("search")) {
+		t.Tweets = append(t.Tweets, tweet)
+		sort.Sort(Tweets(t.Tweets))
+		t.Tweets = t.Tweets[:len(t.Tweets)-1]
+	}
 }
 
 func (t *TwitterClient) handleTwitter(w http.ResponseWriter, r *http.Request) {
@@ -100,9 +114,11 @@ func (t *TwitterClient) handleTwitter(w http.ResponseWriter, r *http.Request) {
 func (t Tweets) Len() int {
 	return len(t)
 }
+
 func (t Tweets) Swap(i, j int) {
 	t[i], t[j] = t[j], t[i]
 }
+
 func (t Tweets) Less(i, j int) bool {
 	return t[i].CreatedAt > t[j].CreatedAt
 }
@@ -110,13 +126,7 @@ func (t Tweets) Less(i, j int) bool {
 // serveCmd represents the serve command
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "serve the twitter API service",
 	Run: func(cmd *cobra.Command, args []string) {
 		t := NewTwitterClient()
 		t.readStream()
