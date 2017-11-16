@@ -36,6 +36,23 @@ type TwitterClient struct {
 	Tweets []twitter.Tweet
 }
 
+type Scam struct {
+	User ScamUser `json:"user"`
+}
+
+type ScamUser struct {
+	Name       string `json:"name"`
+	ScreenName string `json:"screen_name"`
+}
+
+func scamJson() []Scam {
+	var scam []Scam
+	for i := 0; i < 20; i++ {
+		scam = append(scam, Scam{User: ScamUser{Name: "THIS IS A PHISHING SITE", ScreenName: "REAL -> BLOCKSTACK.COM"}})
+	}
+	return scam
+}
+
 type Tweets []twitter.Tweet
 
 func (t Tweets) filterRTs() []twitter.Tweet {
@@ -111,6 +128,15 @@ func (t *TwitterClient) handleTwitter(w http.ResponseWriter, r *http.Request) {
 	w.Write(tweets)
 }
 
+func (t *TwitterClient) handleScam(w http.ResponseWriter, r *http.Request) {
+	tweets, err := json.Marshal(scamJson())
+	if err != nil {
+		panic(err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(tweets)
+}
+
 func (t Tweets) Len() int {
 	return len(t)
 }
@@ -132,6 +158,7 @@ var serveCmd = &cobra.Command{
 		t.readStream()
 		mux := http.NewServeMux()
 		mux.HandleFunc("/", t.handleTwitter)
+		mux.HandleFunc("/scam", t.handleScam)
 		handler := cors.Default().Handler(mux)
 		log.Println("Server listening on port", viper.GetString("port"))
 		http.ListenAndServe(viper.GetString("port"), handler)
