@@ -39,8 +39,6 @@ if ($http_referer ~* scam\.site) {
 }
 ```
 
-Below are some photos for your enjoyment:
+Below are photos of two of the sites (`blockstack.one` and `blockstack.network`) for your enjoyment:
 
-![blockstack.network](./blockstack.network.png)
-
-![blockstack.one](./blockstack.one.png)
+![scammers.png](./scammers.png)
