@@ -21,7 +21,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
-	"strings"
+	"time"
 
 	"github.com/dghubble/go-twitter/twitter"
 	"github.com/dghubble/oauth1"
@@ -55,10 +55,11 @@ func scamJson() []Scam {
 
 type Tweets []twitter.Tweet
 
-func (t Tweets) filterRTs() []twitter.Tweet {
+func (t Tweets) filterTweets() []twitter.Tweet {
 	out := make([]twitter.Tweet, 0)
 	for _, tw := range t {
-		if strings.Contains(tw.Text, viper.GetString("search")) {
+		ca, _ := tw.CreatedAtTime()
+		if tw.RetweetedStatus == nil && ca.Sub(time.Now()) < time.Hour*24 && len(out) < 20 {
 			out = append(out, tw)
 		}
 	}
@@ -71,21 +72,24 @@ func NewTwitterClient() *TwitterClient {
 	token := oauth1.NewToken(viper.GetString("accessToken"), viper.GetString("accessSecret"))
 	httpClient := config.Client(oauth1.NoContext, token)
 	client := twitter.NewClient(httpClient)
-	s, _, err := client.Search.Tweets(&twitter.SearchTweetParams{
-		Query: viper.GetString("search"),
-		Count: 20,
+	tc := &TwitterClient{
+		Client: client,
+	}
+	tc.Tweets = tc.runSearch()
+	return tc
+}
+
+func (t *TwitterClient) runSearch() []twitter.Tweet {
+	s, _, err := t.Client.Search.Tweets(&twitter.SearchTweetParams{
+		ResultType: "recent",
+		Query:      viper.GetString("search"),
+		Count:      50,
 	})
 	if err != nil {
 		panic(err)
 	}
 	sort.Sort(Tweets(s.Statuses))
-	if err != nil {
-		panic(err)
-	}
-	return &TwitterClient{
-		Client: client,
-		Tweets: Tweets(s.Statuses).filterRTs(),
-	}
+	return Tweets(s.Statuses).filterTweets()
 }
 
 func (t *TwitterClient) makeStream() *twitter.Stream {
@@ -104,7 +108,7 @@ func (t *TwitterClient) readStream() {
 	demux := twitter.NewSwitchDemux()
 	stream := t.makeStream()
 	demux.Tweet = func(tweet *twitter.Tweet) {
-		log.Println(tweet.User.Name, tweet.Text)
+		log.Println(tweet.User.ScreenName, tweet.Text)
 		t.addTweet(*tweet)
 	}
 	log.Println("Handling Channel")
@@ -112,11 +116,9 @@ func (t *TwitterClient) readStream() {
 }
 
 func (t *TwitterClient) addTweet(tweet twitter.Tweet) {
-	if strings.Contains(tweet.Text, viper.GetString("search")) {
-		t.Tweets = append(t.Tweets, tweet)
-		sort.Sort(Tweets(t.Tweets))
-		t.Tweets = t.Tweets[:len(t.Tweets)-1]
-	}
+	t.Tweets = append(t.Tweets, tweet)
+	sort.Sort(Tweets(t.Tweets))
+	t.Tweets = Tweets(t.Tweets).filterTweets()
 }
 
 func (t *TwitterClient) handleTwitter(w http.ResponseWriter, r *http.Request) {
